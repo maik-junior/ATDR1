@@ -5,10 +5,9 @@ import pandas as pd
 import numpy
 import time
 
-# Carregar a imagem
-st.image("../file/Imagem2.jpg",width=120)
-
 def main():
+    #==> Imagem
+    # st.image('file/Imagem2.jpg',width=120)
 
     #==> Criando sidebar
     competitions = sb.competitions()
