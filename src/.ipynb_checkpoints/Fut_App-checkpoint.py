@@ -3,6 +3,15 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from statsbombpy import sb
 import pandas as pd
+from services.tab1 import _tab1
+
+#==> Configuração de página
+st.set_page_config(
+    page_title='Página Inicial',
+    page_icon='⚽',
+    layout='centered',
+    initial_sidebar_state='expanded'
+)
 
 #==> Carregando em cache
 @st.cache_data
@@ -21,16 +30,24 @@ def get_events(match_id):
 def get_lineups(match_id, team):
     return pd.DataFrame(sb.lineups(match_id=match_id)[team]).drop(columns=['player_nickname', 'cards'])
 
-#==> Funcao principal
+#==> Inicializa o estado de sessão
+def init_session_state(dataframe):
+    if 'matches' not in st.session_state:
+        st.session_state.matches = dataframe
+
+    if 'selected_columns' not in st.session_state:
+        st.session_state.selected_columns = dataframe.columns.tolist() if not dataframe.empty else []
+
+#==> Função principal
 def main():
     #==> Criando sidebar
     competitions = get_competitions()
-    competition = st.sidebar.selectbox("Selecione a competicao", competitions["competition_name"].unique())
+    competition = st.sidebar.selectbox("Selecione a competição", competitions["competition_name"].unique())
     
-    #==> Nome da competicao
+    #==> Nome da competição
     st.title(competition)
     
-    #==> Recuperando ID da competição
+    #==> Recuperando id da competição
     competition_id = competitions[competitions["competition_name"] == competition]["competition_id"].values[0]
     
     col1, col2 = st.columns(2)
@@ -46,7 +63,7 @@ def main():
             return f"{row['match_date']} - {row['home_team']} vs {row['away_team']}"
     
         matches = get_matches(competition_id=competition_id, season_id=season_id)  # Usando cache
-        id = st.selectbox('Selecione o jogo', matches["match_id"], format_func=lambda idx: get_match_label(matches, idx), key=3)
+        id = st.selectbox('Selecione o jogo', matches["match_id"], format_func=lambda idx: get_match_label(matches, idx), key=3) 
     
     #==> Criando DataFrame da partida
     df_partida = pd.DataFrame(matches[['match_id', 'home_team', 'away_team']])
@@ -60,46 +77,33 @@ def main():
     home_team = df_partida['home_team'][index]
     away_team = df_partida['away_team'][index]
     
-    #==> Tabs
+    #==> Abas
     tab1, tab2, tab3 = st.tabs(['Partida', 'Time Mandante', 'Time Visitante'])
     
     with tab1:
-        eventos = pd.DataFrame(get_events(_id))  # Usando cache
-        resultado = eventos[['team_id', 'shot_outcome', 'team']].groupby(['shot_outcome', 'team']).count().reset_index()
+        _tab1(get_events(_id))
+
+        matches = matches[['match_id', 'match_date', 'kick_off', 'competition', 'season', 'home_team', 'away_team', 'home_score', 'away_score']]
         
-        st.subheader('Gols')
-        st.write(resultado.loc[resultado['shot_outcome'] == 'Goal', :])
-    
-        st.subheader('Posse de bola')
-        team_counts = eventos[['possession', 'team']].groupby('team').team.count()
+        #==> Partidas da temporada
+        st.header('Todas Partidas da Temporada')
         
-        # Gráfico pizza
-        fig, ax = plt.subplots()
-        ax.pie(team_counts, labels=team_counts.index, autopct='%1.1f%%', startangle=90)
-        ax.axis('equal')
-        st.pyplot(fig)
+        #==> Selecionar colunas
+        selected_columns = st.multiselect(
+            'Selecione os dados desejados',
+            options=matches.columns,
+            default=matches.columns.tolist()
+        )
         
-        st.subheader('Jogada Predominante')
-        duel_count = eventos.groupby('duel_type').size()
+        #==> Inicializando o estado da sessão
+        init_session_state(matches)
         
-        # Gráfico pizza de jogadas
-        fig, ax = plt.subplots()
-        ax.pie(duel_count, labels=duel_count.index, autopct='%1.1f%%', startangle=90)
-        ax.axis('equal')
-        st.pyplot(fig)
-    
-        st.subheader('Jogadores mais Requisitados em Campo')
-        player_team_count = eventos[['player_id', 'player', 'team']].groupby(['player', 'team']).count().sort_values(by='player_id', ascending=False)
+        #==> Atualiza as colunas selecionadas
+        st.session_state.selected_columns = selected_columns
         
-        # Gráfico de barras
-        fig, ax = plt.subplots()
-        player_team_count['player_id'].plot(kind='bar', ax=ax, figsize=(10, 6))
-        ax.set_xlabel('Jogador e Equipe')
-        ax.set_ylabel('Contagem de Eventos')
-        ax.set_title('Eventos por Jogador e Equipe')
-        plt.xticks(rotation=90)
-        st.pyplot(fig)
-    
+        #==> Exibe o DataFrame
+        st.dataframe(matches[st.session_state.selected_columns])
+   
     with tab2:
         #==> Time mandante
         st.title(f'Time: {home_team} - Mandante')
